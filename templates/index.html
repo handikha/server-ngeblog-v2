@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OTP Token</title>
+  </head>
+  <body>
+    <div
+      style="
+        font-family: Helvetica, Arial, sans-serif;
+        min-width: 1000px;
+        overflow: auto;
+        line-height: 2;
+      "
+    >
+      <div style="margin: 50px auto; width: 70%; padding: 20px 0">
+        <div style="border-bottom: 1px solid #eee">
+          <a
+            href=""
+            style="
+              font-size: 1.4em;
+              color: #06b6d4;
+              text-decoration: none;
+              font-weight: 600;
+            "
+            >Ngeblog.</a
+          >
+        </div>
+        <p style="font-size: 1.1em">Hi,</p>
+        <p>Thank you for choosing Ngbelog.</p>
+        <p>Do not share with anyone.</p>
+        <p>
+          <a href="{{ link }}" style="font-weight: bolder">Click this link</a>
+          and use the following OTP to complete your
+          <span style="font-weight: bolder">{{action}}</span> procedure. OTP is
+          valid until {{expiredOtp}}
+        </p>
+        <h2
+          style="
+            background: #a5c3eb;
+            margin: 0 auto;
+            width: max-content;
+            padding: 0 10px;
+            color: #000000;
+            border-radius: 4px;
+          "
+        >
+          {{otpToken}}
+        </h2>
+        <p style="font-size: 0.9em">Regards,<br />Ngeblog.</p>
+        <hr style="border: none; border-top: 1px solid #eee" />
+        <div
+          style="
+            float: right;
+            padding: 8px 0;
+            color: #aaa;
+            font-size: 0.8em;
+            line-height: 1;
+            font-weight: 300;
+          "
+        >
+          <p>Ngeblog.</p>
+          <!-- <p>1600 Amphitheatre Parkway</p> -->
+          <p>Indonesia</p>
+        </div>
+      </div>
+    </div>
+    <!-- <h1>You have {{action}} on Ngeblog.</h1>
+    <h3>OTP token:</h3>
+    <h1>{{ otpToken }}</h1>
+    <p>
+      <a href="{{ link }}" style="font-weight: bolder">Click this link</a> to
+      enter your OTP and don't share it with the others.
+    </p> -->
+  </body>
+</html>
