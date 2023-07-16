@@ -8,14 +8,11 @@ import * as config from "../../config/index.js";
 import * as helpers from "../../helpers/index.js";
 import * as error from "../../middlewares/error.handler.js";
 import { User, Profile } from "../../models/user.profile.js";
-import db from "../../database/index.js";
 import * as validation from "./validation.js";
+import db from "../../database/index.js";
 
 export const register = async (req, res, next) => {
   try {
-    // @create transaction
-    // const transaction = await db.sequelize.transaction();
-
     // @validation
     const { username, email, phone, password } = req.body;
     await validation.RegisterValidationSchema.validate(req.body);
@@ -96,12 +93,7 @@ export const register = async (req, res, next) => {
       if (error) throw error;
       console.log("Email sent: " + info.response);
     });
-
-    // await transaction.commit();
   } catch (error) {
-    // @rollback transaction
-    // await transaction.rollback();
-
     // @check if error from validation
     if (error instanceof ValidationError) {
       return next({ status: 400, message: error?.errors?.[0] });
@@ -293,7 +285,7 @@ export const requestOtp = async (req, res, next) => {
       expiredOtp: moment.utc(expiredOtp).local().format("YYYY-MM-DD HH:mm:ss"),
       otpToken,
       link:
-        config.REDIRECT_URL + `/auth/verify/register-${user?.dataValues?.uuid}`,
+        config.REDIRECT_URL + `/auth/verify/verify-${user?.dataValues?.uuid}`,
     });
 
     //@send verification email
@@ -538,9 +530,10 @@ export const deleteAccount = async (req, res, next) => {
     await user?.update({ status: 2 }, { where: { uuid } });
 
     // @return response
-    res.status(200).json({ message: "Account deleted successfully" });
+    res
+      .status(200)
+      .json({ message: "Account deleted successfully", data: user });
   } catch (error) {
     next(error);
   }
 };
-
