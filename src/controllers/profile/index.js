@@ -10,11 +10,9 @@ export const uploadImage = async (req, res, next) => {
       throw { status: 400, message: error.USER_NOT_VERIFIED };
 
     // @check if image is uploaded
-    if (!req.file) {
-      throw new { status: 400, message: "Please upload an image." }();
-    }
+    if (!req.file) throw { status: 400, message: "Please upload an image." };
 
-    // console.log(req.file);
+    console.log(req.file);
 
     // @TODO: delete the old image
 
@@ -63,6 +61,18 @@ export const updateProfile = async (req, res, next) => {
 
     // @send response
     res.status(200).json({ message: "Profile updated successfully" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @get profile image
+export const getProfileImg = async (req, res, next) => {
+  try {
+    const { id } = req.user;
+    const profile = await Profile.findOne({ where: { userId: id } });
+
+    res.status(200).json(profile.profileImg);
   } catch (error) {
     next(error);
   }

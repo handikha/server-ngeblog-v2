@@ -5,34 +5,37 @@ import path from "path";
 import * as config from "../config/index.js";
 
 // @configure storage
-export const createDiskStorage = (directory) => multer.diskStorage({
+export const createDiskStorage = (directory) =>
+  multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, directory)
+      cb(null, directory);
     },
     filename: (req, file, cb) => {
-        // @if image type is valid
-        cb(null, "IMG" + "-" + Date.now() + path.extname(file.originalname))
-        // IMG-198031830918309183.jpg
-    }
-})
+      // @if image type is valid
+      cb(null, "IMG" + "-" + Date.now() + path.extname(file.originalname));
+      // IMG-198031830918309183.jpg
+    },
+  });
 
 // @configure cloudinary storage
 cloudinary.config({
-    cloud_name: config.CLOUDINARY_CLOUD_NAME,
-    api_key: config.CLOUDINARY_API_KEY,
-    api_secret: config.CLOUDINARY_API_SECRET
-})
+  cloud_name: config.CLOUDINARY_CLOUD_NAME,
+  api_key: config.CLOUDINARY_API_KEY,
+  api_secret: config.CLOUDINARY_API_SECRET,
+});
 
-export const createCloudinaryStorage = (directory) => new CloudinaryStorage({
+export const createCloudinaryStorage = (directory) =>
+  new CloudinaryStorage({
     cloudinary: cloudinary,
     params: {
-        folder: directory,
-        allowedFormats: ['jpeg', 'png', 'jpg'],
-    }
-})
+      folder: directory,
+      allowedFormats: ["jpeg", "png", "jpg"],
+    },
+  });
 
 // @configure upload
-export const createUploader = (storage) => multer({
+export const createUploader = (storage) =>
+  multer({
     storage: storage,
     limits: { fileSize: 2000000 }, // @1MB
     // fileFilter: (req, file, cb) => {
@@ -48,4 +51,4 @@ export const createUploader = (storage) => multer({
     //     // @if image type is valid
     //     cb(null, true)
     // }
-})
+  });

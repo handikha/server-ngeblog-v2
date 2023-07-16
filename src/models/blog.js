@@ -31,11 +31,10 @@ export const Blog = db.sequelize.define("blogs", {
     defaultValue: 1,
   },
   blogImg: {
-    type: db.Sequelize.INTEGER,
+    type: db.Sequelize.STRING,
     allowNull: false,
   },
 });
 
-// Define associations
 Blog.belongsTo(User, { foreignKey: "userId" });
 Blog.belongsTo(Category, { foreignKey: "categoryId" });

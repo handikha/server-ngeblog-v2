@@ -22,6 +22,7 @@ router.patch(
   ProfileControllers.uploadImage
 );
 router.get("/profile", verifyUser, ProfileControllers.getProfile);
+router.get("/view-profile-image", verifyUser, ProfileControllers.getProfileImg);
 router.patch("/profile/update", verifyUser, ProfileControllers.updateProfile);
 
 // @export router

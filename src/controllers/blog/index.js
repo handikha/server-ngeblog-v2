@@ -1,15 +1,18 @@
 import { Blog } from "../../models/blog.js";
 import { Like } from "../../models/like.js";
 import { Save } from "../../models/save.js";
+import { Profile, User } from "../../models/user.profile.js";
 import { ValidationError } from "yup";
 import { BlogValidationSchema } from "./validation.js";
-import { BAD_REQUEST } from "../../middlewares/error.handler.js";
+import { BAD_REQUEST_STATUS } from "../../middlewares/error.handler.js";
 import db from "../../database/index.js";
+import { Category } from "../../models/category.js";
+import cloudinary from "cloudinary";
+import { getCloudinaryImageName } from "../../utils/index.js";
 
 export const getBlogs = async (req, res, next) => {
   try {
-    const { page, limit, categoryId } = req.query;
-    console.log(categoryId);
+    const { page, limit, category_id } = req.query;
 
     const options = {
       offset: page > 1 ? (page - 1) * limit : 0,
@@ -17,8 +20,8 @@ export const getBlogs = async (req, res, next) => {
     };
 
     // @get total tickets
-    const total = categoryId
-      ? await Blog?.count({ where: { categoryId } })
+    const total = category_id
+      ? await Blog?.count({ where: { categoryId: category_id } })
       : await Blog.count();
 
     // @get total pages
@@ -31,17 +34,24 @@ export const getBlogs = async (req, res, next) => {
             db.Sequelize.literal(`(
               SELECT COUNT(*)
               FROM likes
-              WHERE likes.postId = blogs.id
+              WHERE likes.blogId = blogs.id
             )`),
             "totalLikes",
           ],
         ],
       },
+      include: [
+        {
+          model: User,
+          attributes: ["username"],
+          include: {
+            model: Profile,
+            attributes: ["profileImg"],
+          },
+        },
+      ],
+      where: category_id ? { categoryId: category_id } : {},
     };
-
-    if (categoryId) {
-      queryOptions.where = { categoryId };
-    }
 
     const blogs = await Blog.findAll({ ...queryOptions, ...options });
 
@@ -54,6 +64,43 @@ export const getBlogs = async (req, res, next) => {
       next_page: page < pages ? parseInt(page) + 1 : null,
       total_pages: pages,
       data: blogs,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getPopularBlogs = async (req, res, next) => {
+  try {
+    const { category_id } = req.query;
+
+    const queryOptions = {
+      attributes: {
+        include: [
+          [
+            db.Sequelize.fn("COUNT", db.Sequelize.col("likes.id")),
+            "totalLikes",
+          ],
+        ],
+      },
+      include: [
+        {
+          model: Like,
+          as: "likes",
+          attributes: [],
+        },
+      ],
+      group: ["blogs.id"],
+      order: [["totalLikes", "DESC"]],
+      where: category_id ? { categoryId: category_id } : {},
+    };
+
+    const blogs = await Blog.findAll(queryOptions);
+
+    res.status(200).json({
+      type: "success",
+      message: "Popular blogs fetched",
+      blogs,
     });
   } catch (error) {
     next(error);
@@ -101,7 +148,7 @@ export const toggleLikeBlog = async (req, res, next) => {
     // Check if the blog exists
     const blog = await Blog.findOne({ where: { id: blogId } });
     if (!blog) {
-      throw { status: BAD_REQUEST, message: "Blog not found" };
+      throw { status: BAD_REQUEST_STATUS, message: "Blog not found" };
     }
 
     // Check if the like record exists
@@ -126,63 +173,176 @@ export const toggleLikeBlog = async (req, res, next) => {
   }
 };
 
-
-// @save blog
-export const saveBlog = async (req, res, next) => {
+// @get liked blogs
+export const getLikedBlogs = async (req, res, next) => {
   try {
-    const { blogId } = req.params;
+    const userId = req.user.id;
 
-    // Check if the blog exists
-    const blog = await Blog.findOne({ where: { id: blogId } });
-    if (!blog) {
-      throw { status: BAD_REQUEST, message: "Blog not found" };
-    }
-
-    // Check if the save record already exists
-    const existingSave = await Save.findOne({
-      where: { blogId, userId: req.user?.id },
+    const likedBlogs = await Blog.findAll({
+      attributes: ["id"],
+      include: [
+        {
+          model: Like,
+          where: { userId },
+          attributes: [],
+        },
+      ],
     });
 
-    if (existingSave) {
-      throw { status: BAD_REQUEST, message: "You already saved this blog" };
-    }
+    res.status(200).json({ type: "success", likedBlogs });
 
-    // Create the save record
-    const save = await Save.create({
-      blogId,
-      userId: req.user?.id,
-    });
-
-    res.status(200).json({ type: "success", message: "Blog saved", save });
+    // const blogsId = likedBlogs.map((blog) => blog.id);
+    // res.status(200).json({ type: "success", likedBlogs: blogsId });
   } catch (error) {
     next(error);
   }
 };
 
-// @unsave blog
-export const unsaveBlog = async (req, res, next) => {
+// @save/unsave blog
+export const toggleSaveBlog = async (req, res, next) => {
   try {
     const { blogId } = req.params;
+    const userId = req.user?.id;
 
     // Check if the blog exists
     const blog = await Blog.findOne({ where: { id: blogId } });
     if (!blog) {
-      throw { status: BAD_REQUEST, message: "Blog not found" };
+      throw { status: BAD_REQUEST_STATUS, message: "Blog not found" };
     }
 
-    // Check if the save record exists
-    const save = await Save.findOne({
-      where: { blogId, userId: req.user?.id },
+    // Check if the like record exists
+    const isSaved = await Save.findOne({
+      where: { blogId, userId },
     });
 
-    if (!save) {
-      throw { status: BAD_REQUEST, message: "You have not saved this blog" };
+    if (isSaved) {
+      // unlike blog
+      await isSaved.destroy();
+      res.status(200).json({ type: "success", message: "Blog unsaved" });
+    } else {
+      // like blog
+      const save = await Save.create({
+        blogId,
+        userId,
+      });
+      res.status(200).json({ type: "success", message: "Blog saved", save });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @get saved blogs
+export const getSavedBlogs = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const savedBlogs = await Blog.findAll({
+      attributes: ["id"],
+      include: [
+        {
+          model: Save,
+          where: { userId },
+          attributes: [],
+        },
+      ],
+    });
+
+    res.status(200).json({ type: "success", savedBlogs });
+
+    // const blogsId = likedBlogs.map((blog) => blog.id);
+    // res.status(200).json({ type: "success", likedBlogs: blogsId });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @get categories
+export const getCategories = async (req, res, next) => {
+  try {
+    const categories = await Category.findAll();
+    res.status(200).json({ type: "success", categories });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @archive blog
+export const archiveBlog = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    const blog = await Blog.findOne({ where: { id, userId } });
+    if (!blog) {
+      throw { status: BAD_REQUEST_STATUS, message: "Blog not found" };
     }
 
-    // Delete the save record
-    await save.destroy();
+    await blog.update({ status: 0 });
 
-    res.status(200).json({ type: "success", message: "Blog unsaved" });
+    res.status(200).json({ type: "success", message: "Blog archived", blog });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @publish blog
+export const publishBlog = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    const blog = await Blog.findOne({ where: { id, userId } });
+    if (!blog) {
+      throw { status: BAD_REQUEST_STATUS, message: "Blog not found" };
+    }
+
+    await blog.update({ status: 1 });
+
+    res.status(200).json({ type: "success", message: "Blog published", blog });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @delete blog
+export const deleteBlog = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    const blog = await Blog.findOne({ where: { id, userId } });
+
+    if (!blog) {
+      throw { status: BAD_REQUEST_STATUS, message: "Blog not found" };
+    }
+
+    const blogImg = getCloudinaryImageName(blog.blogImg);
+
+    await blog.update({ status: 2, blogImg: "" });
+
+    await cloudinary.v2.api.delete_resources([`${blogImg}`], {
+      type: "upload",
+      resource_type: "image",
+    });
+
+    res.status(200).json({ type: "success", message: "Blog deleted", blog });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @get profile image
+export const getBlogImg = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const blog = await Blog.findOne({ where: { id } });
+
+    if (!blog) {
+      throw { status: 400, message: "Blog Not Found" };
+    }
+
+    res.status(200).json(blog.blogImg);
   } catch (error) {
     next(error);
   }

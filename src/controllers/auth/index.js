@@ -81,7 +81,8 @@ export const register = async (req, res, next) => {
       action: "registration",
       expiredOtp: moment.utc(expiredOtp).local().format("YYYY-MM-DD HH:mm:ss"),
       otpToken,
-      link: config.REDIRECT_URL + `/auth/verify/reg-${user?.dataValues?.uuid}`,
+      link:
+        config.REDIRECT_URL + `/auth/verify/verify-${user?.dataValues?.uuid}`,
     });
 
     //@send verification email
@@ -133,7 +134,7 @@ export const login = async (req, res, next) => {
       password,
       userExists?.dataValues?.password
     );
-    console.log(isPasswordCorrect);
+    // console.log(isPasswordCorrect);
     if (!isPasswordCorrect)
       throw { status: 400, message: error.INVALID_CREDENTIALS };
 
@@ -168,7 +169,7 @@ export const keepLogin = async (req, res, next) => {
   try {
     // @get user id from token
     const { uuid } = req.user;
-
+    console.log(uuid);
     // @get user data
     const user = await User?.findOne({ where: { uuid }, include: Profile });
 
@@ -198,7 +199,7 @@ const verifyOTP = async (uuid, token) => {
 };
 
 export const verify = {
-  register: async (req, res, next) => {
+  verifyAccount: async (req, res, next) => {
     try {
       const { uuid, token } = req.body;
       const userId = uuid.split("-").slice(1).join("-");
@@ -206,8 +207,8 @@ export const verify = {
 
       const user = await verifyOTP(userId, token);
 
-      // @verify: registration
-      if (user && context === "register") {
+      // @verify
+      if (user && context === "verify") {
         // @update user status
         await User?.update(
           { status: 1, otp: null, expiredOtp: null },
@@ -223,6 +224,7 @@ export const verify = {
       next(error);
     }
   },
+
   resetPassword: async (req, res, next) => {
     try {
       const { uuid, token } = req.body;
@@ -256,13 +258,15 @@ export const verify = {
 };
 
 // @request otp token
-export const requestRegistrationOtp = async (req, res, next) => {
+export const requestOtp = async (req, res, next) => {
   try {
     // @get user email, context from body (reg or reset)
-    const { email, context } = req.body;
+    const { email } = req.body;
 
     // @check if user exists
     const user = await User?.findOne({ where: { email } });
+    if (user.status === 1)
+      throw { status: 400, message: "Your account has been verified" };
     if (!user) throw { status: 400, message: error.USER_DOES_NOT_EXISTS };
 
     // @generate otp
@@ -320,8 +324,17 @@ export const changeUsername = async (req, res, next) => {
     if (user.status === 0)
       throw { status: 400, message: error.USER_NOT_VERIFIED };
 
-    const { username } = req.body;
+    const { username, password } = req.body;
     await validation.ChangeUsernameValidationSchema.validate(req.body);
+
+    // @check if password is correct
+    const isPasswordCorrect = helpers.comparePassword(
+      password,
+      user?.dataValues?.password
+    );
+    // console.log(isPasswordCorrect);
+    if (!isPasswordCorrect)
+      throw { status: 400, message: error.INVALID_CREDENTIALS };
 
     // Check if the new username is different from the current username
     if (user.username !== username) {
@@ -332,6 +345,8 @@ export const changeUsername = async (req, res, next) => {
       }
       // Update the username
       await User.update({ username }, { where: { id: req.user.id } });
+    } else {
+      throw { status: 400, message: "Please insert new username" };
     }
 
     // @return response
@@ -341,7 +356,6 @@ export const changeUsername = async (req, res, next) => {
   }
 };
 
-// @change email
 export const changeEmail = async (req, res, next) => {
   try {
     const user = await User?.findOne({ where: { id: req.user.id } });
@@ -359,8 +373,45 @@ export const changeEmail = async (req, res, next) => {
       if (existingEmail) {
         throw { status: 400, message: "Email is already taken" };
       }
+      // @generate otp
+      const otpToken = helpers.generateOtp();
+      const expiredOtp = moment.utc().add(1, "days").format();
+
       // Update the username
-      await User.update({ email }, { where: { id: req.user.id } });
+      await User.update(
+        { email, status: 0, otp: otpToken, expiredOtp },
+        { where: { id: req.user.id } }
+      );
+
+      // @generate email message
+      const template = fs.readFileSync(
+        path.join(process.cwd(), "templates", "index.html"),
+        "utf8"
+      );
+      const message = handlebars.compile(template)({
+        action: "registration",
+        expiredOtp: moment
+          .utc(expiredOtp)
+          .local()
+          .format("YYYY-MM-DD HH:mm:ss"),
+        otpToken,
+        link:
+          config.REDIRECT_URL + `/auth/verify/verify-${user?.dataValues?.uuid}`,
+      });
+
+      //@send verification email
+      const mailOptions = {
+        from: config.GMAIL,
+        to: email,
+        subject: "[Ngeblog] Please verify your account",
+        html: message,
+      };
+      helpers.transporter.sendMail(mailOptions, (error, info) => {
+        if (error) throw error;
+        console.log("Email sent: " + info.response);
+      });
+    } else {
+      throw { status: 400, message: "Please input new email" };
     }
 
     // @return response
@@ -374,6 +425,7 @@ export const changeEmail = async (req, res, next) => {
 export const changePhone = async (req, res, next) => {
   try {
     const user = await User?.findOne({ where: { uuid: req.user.uuid } });
+    console.log(user);
 
     if (user.status === 0)
       throw { status: 400, message: error.USER_NOT_VERIFIED };
@@ -480,9 +532,10 @@ export const deleteAccount = async (req, res, next) => {
   try {
     // @get user id from token
     const { uuid } = req.user;
+    const user = await User.findOne({ where: { uuid } });
 
     // @delete user
-    await User?.update({ status: 2 }, { where: { uuid } });
+    await user?.update({ status: 2 }, { where: { uuid } });
 
     // @return response
     res.status(200).json({ message: "Account deleted successfully" });
@@ -491,64 +544,3 @@ export const deleteAccount = async (req, res, next) => {
   }
 };
 
-// @verify account
-// export const verify = async (req, res, next) => {
-//   try {
-//     // @get token from params
-//     const { uuid, token } = req.body;
-
-//     // @check context
-//     const context = uuid.split("-")[0];
-//     const userId = uuid.split("-")?.slice(1)?.join("-");
-//     console.log(userId);
-
-//     // @check if user exists
-//     const user = await User?.findOne({ where: { uuid: userId } });
-//     if (!user) throw { status: 400, message: error.USER_DOES_NOT_EXISTS };
-
-//     // @verify token
-//     if (token !== user?.dataValues?.otp)
-//       throw { status: 400, message: error.INVALID_CREDENTIALS };
-
-//     // @check if token is expired
-//     const isExpired = moment().isAfter(user?.dataValues?.expiredOtp);
-//     if (isExpired) throw { status: 400, message: "Token Expired" };
-
-//     // @verify: registration
-//     if (context === "reg") {
-//       // @update user status
-//       await User?.update(
-//         { status: 1, otp: null, expiredOtp: null },
-//         { where: { uuid: userId } }
-//       );
-
-//       // @return response
-//       res
-//         .status(200)
-//         .json({ message: "Account verified successfully", data: uuid });
-//     }
-
-//     // @verify: reset password
-//     if (context === "resetPassword") {
-//       const { newPassword } = req.body;
-//       await validation.ResetPasswordValidationSchema.validate(req.body);
-
-//       // @encrypt password
-//       const hashedPassword = helpers.hashPassword(newPassword);
-
-//       // @update user status
-//       await User?.update(
-//         { password: hashedPassword, otp: null, expiredOtp: null },
-//         { where: { uuid: userId } }
-//       );
-
-//       // @return response
-//       res
-//         .status(200)
-//         .json({ message: "Password changed successfully", data: uuid });
-//     }
-
-//   } catch (error) {
-//     next(error);
-//   }
-// };
