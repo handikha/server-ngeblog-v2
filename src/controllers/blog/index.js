@@ -12,7 +12,7 @@ import { getCloudinaryImageName } from "../../utils/index.js";
 
 export const getBlogs = async (req, res, next) => {
   try {
-    const { page, limit, category_id } = req.query;
+    const { page, limit, category_id, sort } = req.query;
 
     const options = {
       offset: page > 1 ? (page - 1) * limit : 0,
@@ -51,6 +51,7 @@ export const getBlogs = async (req, res, next) => {
         },
       ],
       where: category_id ? { categoryId: category_id } : {},
+      order: [["createdAt", sort ? sort : "ASC"]],
     };
 
     const blogs = await Blog.findAll({ ...queryOptions, ...options });
@@ -111,6 +112,7 @@ export const getPopularBlogs = async (req, res, next) => {
 export const createBlog = async (req, res, next) => {
   try {
     const { data } = req.body;
+    console.log(data);
     const body = JSON.parse(data);
     const { title, content, categoryId } = body;
 
